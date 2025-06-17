@@ -13,8 +13,16 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-// CORS middleware
-app.use(cors());
+// CORS middleware with specific origin for production
+const corsOptions = {
+  origin: process.env.NODE_ENV === 'production' 
+    ? [process.env.FRONTEND_URL || 'https://custom-number-plates-kenya.vercel.app'] 
+    : '*',
+  methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+  credentials: true,
+  optionsSuccessStatus: 204
+};
+app.use(cors(corsOptions));
 
 // Check if we're in a serverless environment
 const isServerless = process.env.VERCEL || process.env.LAMBDA_TASK_ROOT;
