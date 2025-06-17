@@ -12,12 +12,18 @@ async function runMigrations() {
     process.exit(1);
   }
 
-  // Create a connection pool
+  // Create a connection pool with proper SSL configuration
   const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: {
       rejectUnauthorized: false
-    }
+    },
+    // Force IPv4 to avoid IPv6 issues
+    host: process.env.DATABASE_URL.match(/\@([^:]+):/)[1].replace(/^db\./, ''),
+    user: 'postgres',
+    password: 'hbFgA_%SudyM997',
+    database: 'postgres',
+    port: 5432
   });
 
   try {
