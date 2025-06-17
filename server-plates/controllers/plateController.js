@@ -1,6 +1,5 @@
 const asyncHandler = require('express-async-handler');
-const { Plate, OrderItem } = require('../models');
-const { Op } = require('sequelize');
+const { supabase } = require('../supabase');
 
 // @desc    Get all plates
 // @route   GET /api/v1/plates
@@ -8,32 +7,40 @@ const { Op } = require('sequelize');
 const getPlates = asyncHandler(async (req, res) => {
   const { type } = req.query;
   
-  const whereConditions = {};
+  let query = supabase.from('plates').select('*');
   
   if (type) {
-    whereConditions.plateType = type;
+    query = query.eq('type', type);
   }
   
-  const plates = await Plate.findAll({
-    where: whereConditions,
-    order: [['createdAt', 'DESC']],
-  });
+  query = query.order('created_at', { ascending: false });
   
-  res.json(plates);
+  const { data, error } = await query;
+  
+  if (error) {
+    res.status(500);
+    throw new Error(error.message);
+  }
+  
+  res.json(data);
 });
 
 // @desc    Get plate by ID
 // @route   GET /api/v1/plates/:id
 // @access  Public
 const getPlateById = asyncHandler(async (req, res) => {
-  const plate = await Plate.findByPk(req.params.id);
+  const { data, error } = await supabase
+    .from('plates')
+    .select('*')
+    .eq('id', req.params.id)
+    .single();
   
-  if (plate) {
-    res.json(plate);
-  } else {
+  if (error) {
     res.status(404);
     throw new Error('Plate not found');
   }
+  
+  res.json(data);
 });
 
 // @desc    Generate plate preview
@@ -63,68 +70,104 @@ const generatePlatePreview = asyncHandler(async (req, res) => {
 // @route   POST /api/v1/plates
 // @access  Private/Admin
 const createPlate = asyncHandler(async (req, res) => {
-  const { plateType, text, price, description } = req.body;
+  const { type, name, base_price, description, features, image_url } = req.body;
   
-  if (!plateType || !text) {
+  if (!type || !name || !base_price) {
     res.status(400);
-    throw new Error('Please provide plate type and text');
+    throw new Error('Please provide plate type, name and base price');
   }
   
-  // Generate preview URL
-  const previewUrl = `/previews/${plateType}/${text}.png`;
+  const { data, error } = await supabase
+    .from('plates')
+    .insert([
+      { 
+        type,
+        name,
+        description,
+        base_price,
+        features: features || {},
+        image_url: image_url || null
+      }
+    ])
+    .select()
+    .single();
   
-  const plate = await Plate.create({
-    plateType,
-    text,
-    price,
-    previewUrl,
-    description,
-  });
+  if (error) {
+    res.status(500);
+    throw new Error(error.message);
+  }
   
-  res.status(201).json(plate);
+  res.status(201).json(data);
 });
 
 // @desc    Update plate (admin only)
 // @route   PUT /api/v1/plates/:id
 // @access  Private/Admin
 const updatePlate = asyncHandler(async (req, res) => {
-  const { plateType, text, price, description, isAvailable } = req.body;
+  const { type, name, base_price, description, features, image_url } = req.body;
   
-  const plate = await Plate.findByPk(req.params.id);
+  // First check if plate exists
+  const { data: plate, error: fetchError } = await supabase
+    .from('plates')
+    .select('*')
+    .eq('id', req.params.id)
+    .single();
   
-  if (!plate) {
+  if (fetchError) {
     res.status(404);
     throw new Error('Plate not found');
   }
   
-  plate.plateType = plateType || plate.plateType;
-  plate.text = text || plate.text;
-  plate.price = price || plate.price;
-  plate.description = description || plate.description;
-  plate.isAvailable = isAvailable !== undefined ? isAvailable : plate.isAvailable;
+  // Update the plate
+  const { data, error } = await supabase
+    .from('plates')
+    .update({ 
+      type: type || plate.type,
+      name: name || plate.name,
+      description: description || plate.description,
+      base_price: base_price || plate.base_price,
+      features: features || plate.features,
+      image_url: image_url || plate.image_url,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', req.params.id)
+    .select()
+    .single();
   
-  // Update preview URL if text or type changed
-  if (text || plateType) {
-    plate.previewUrl = `/previews/${plateType || plate.plateType}/${text || plate.text}.png`;
+  if (error) {
+    res.status(500);
+    throw new Error(error.message);
   }
   
-  await plate.save();
-  
-  res.json(plate);
+  res.json(data);
 });
 
 // @desc    Delete plate (admin only)
 // @route   DELETE /api/v1/plates/:id
 // @access  Private/Admin
 const deletePlate = asyncHandler(async (req, res) => {
-  const plate = await Plate.findByPk(req.params.id);
+  // First check if plate exists
+  const { data: plate, error: fetchError } = await supabase
+    .from('plates')
+    .select('*')
+    .eq('id', req.params.id)
+    .single();
   
-  if (!plate) {
+  if (fetchError) {
     res.status(404);
     throw new Error('Plate not found');
   }
   
-  await plate.destroy();
+  // Delete the plate
+  const { error } = await supabase
+    .from('plates')
+    .delete()
+    .eq('id', req.params.id);
+  
+  if (error) {
+    res.status(500);
+    throw new Error(error.message);
+  }
   
   res.json({ message: 'Plate removed' });
 });
@@ -140,22 +183,19 @@ const checkPlateAvailability = asyncHandler(async (req, res) => {
     throw new Error('Please provide plate text to check');
   }
   
-  // First check in the Plates table
-  const existingPlate = await Plate.findOne({
-    where: { 
-      text: text.toUpperCase(),
-      isAvailable: false
-    }
-  });
+  // First check in custom plates
+  const { data: existingCustomPlate, error: customError } = await supabase
+    .from('order_items')
+    .select('id')
+    .ilike('customization->>text', text.toUpperCase())
+    .limit(1);
   
-  // Then check in OrderItems (as backup check)
-  const existingOrderItem = await OrderItem.findOne({
-    where: { 
-      plateText: text.toUpperCase() 
-    }
-  });
+  if (customError) {
+    res.status(500);
+    throw new Error(customError.message);
+  }
   
-  const isAvailable = !existingPlate && !existingOrderItem;
+  const isAvailable = !existingCustomPlate || existingCustomPlate.length === 0;
   
   res.json({
     text: text.toUpperCase(),

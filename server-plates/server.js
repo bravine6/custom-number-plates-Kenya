@@ -83,24 +83,29 @@ app.get('/', (req, res) => {
   res.json({ message: 'Welcome to NTSA Custom Plates API' });
 });
 
-// Health check route with database connection test
+// Import Supabase client
+const { supabase } = require('./supabase');
+
+// Health check route with database connection test using Supabase client
 app.get('/api/v1/health', async (req, res) => {
   try {
-    if (!sequelize) {
-      await getSequelize();
-    }
-    await sequelize.authenticate();
+    // Test connection with a simple query
+    const { data, error } = await supabase.from('plates').select('count', { count: 'exact' });
+    
+    if (error) throw error;
+    
     res.json({ 
       status: 'ok',
-      message: 'API is running and database is connected',
+      message: 'API is running and Supabase is connected',
       database: 'Supabase',
-      environment: process.env.NODE_ENV
+      environment: process.env.NODE_ENV,
+      data: data
     });
   } catch (error) {
     console.error('Health check failed:', error);
     res.status(500).json({
       status: 'error',
-      message: 'Database connection error',
+      message: 'Supabase connection error',
       error: error.message,
       stack: process.env.NODE_ENV === 'production' ? null : error.stack
     });
