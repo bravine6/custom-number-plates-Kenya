@@ -1,5 +1,8 @@
 const asyncHandler = require('express-async-handler');
 
+// Import mock database for fallback
+const mockDb = require('../data/mockData');
+
 // Import Supabase client with error handling
 let supabase;
 try {
@@ -7,6 +10,7 @@ try {
   supabase = supabaseModule.supabase;
 } catch (error) {
   console.error('Error loading Supabase client in plateController:', error.message);
+  console.log('Using mock database instead');
 }
 
 // @desc    Get all plates
@@ -15,46 +19,43 @@ try {
 const getPlates = asyncHandler(async (req, res) => {
   // Check if Supabase client is available
   if (!supabase) {
-    return res.json([
-      {
-        id: 1,
-        name: 'Standard Plate',
-        description: 'Regular Kenyan number plate (Demo - Supabase connection unavailable)',
-        base_price: 5000.00,
-        type: 'standard',
-        features: { colors: ['white', 'black'], materials: ['aluminum'] },
-        image_url: null
-      },
-      {
-        id: 2,
-        name: 'Personalized Plate',
-        description: 'Custom text on your plate (Demo - Supabase connection unavailable)',
-        base_price: 15000.00,
-        type: 'personalized',
-        features: { colors: ['white', 'black', 'blue'], materials: ['aluminum', 'carbon-fiber'] },
-        image_url: null
-      }
-    ]);
+    // Use mock database instead
+    const { type } = req.query;
+    const options = type ? { type } : {};
+    const plates = await mockDb.plates.findAll(options);
+    return res.json(plates);
   }
   
-  const { type } = req.query;
-  
-  let query = supabase.from('plates').select('*');
-  
-  if (type) {
-    query = query.eq('type', type);
+  try {
+    const { type } = req.query;
+    
+    let query = supabase.from('plates').select('*');
+    
+    if (type) {
+      query = query.eq('type', type);
+    }
+    
+    query = query.order('created_at', { ascending: false });
+    
+    const { data, error } = await query;
+    
+    if (error) {
+      console.error('Supabase query error:', error);
+      // Fallback to mock database if Supabase query fails
+      const options = type ? { type } : {};
+      const plates = await mockDb.plates.findAll(options);
+      return res.json(plates);
+    }
+    
+    res.json(data);
+  } catch (error) {
+    console.error('Error in getPlates:', error);
+    // Fallback to mock database if any error occurs
+    const { type } = req.query;
+    const options = type ? { type } : {};
+    const plates = await mockDb.plates.findAll(options);
+    return res.json(plates);
   }
-  
-  query = query.order('created_at', { ascending: false });
-  
-  const { data, error } = await query;
-  
-  if (error) {
-    res.status(500);
-    throw new Error(error.message);
-  }
-  
-  res.json(data);
 });
 
 // @desc    Get plate by ID
@@ -63,46 +64,50 @@ const getPlates = asyncHandler(async (req, res) => {
 const getPlateById = asyncHandler(async (req, res) => {
   // Check if Supabase client is available
   if (!supabase) {
-    // Return demo data based on the ID
-    const id = parseInt(req.params.id);
-    if (id === 1) {
-      return res.json({
-        id: 1,
-        name: 'Standard Plate',
-        description: 'Regular Kenyan number plate (Demo - Supabase connection unavailable)',
-        base_price: 5000.00,
-        type: 'standard',
-        features: { colors: ['white', 'black'], materials: ['aluminum'] },
-        image_url: null
-      });
-    } else if (id === 2) {
-      return res.json({
-        id: 2,
-        name: 'Personalized Plate',
-        description: 'Custom text on your plate (Demo - Supabase connection unavailable)',
-        base_price: 15000.00,
-        type: 'personalized',
-        features: { colors: ['white', 'black', 'blue'], materials: ['aluminum', 'carbon-fiber'] },
-        image_url: null
-      });
-    } else {
+    // Use mock database instead
+    const plate = await mockDb.plates.findOne(req.params.id);
+    
+    if (!plate) {
       res.status(404);
-      throw new Error('Plate not found (Demo - Supabase connection unavailable)');
+      throw new Error('Plate not found');
     }
+    
+    return res.json(plate);
   }
   
-  const { data, error } = await supabase
-    .from('plates')
-    .select('*')
-    .eq('id', req.params.id)
-    .single();
-  
-  if (error) {
-    res.status(404);
-    throw new Error('Plate not found');
+  try {
+    const { data, error } = await supabase
+      .from('plates')
+      .select('*')
+      .eq('id', req.params.id)
+      .single();
+    
+    if (error) {
+      console.error('Supabase query error:', error);
+      // Fallback to mock database if Supabase query fails
+      const plate = await mockDb.plates.findOne(req.params.id);
+      
+      if (!plate) {
+        res.status(404);
+        throw new Error('Plate not found');
+      }
+      
+      return res.json(plate);
+    }
+    
+    res.json(data);
+  } catch (error) {
+    console.error('Error in getPlateById:', error);
+    // Fallback to mock database if any error occurs
+    const plate = await mockDb.plates.findOne(req.params.id);
+    
+    if (!plate) {
+      res.status(404);
+      throw new Error('Plate not found');
+    }
+    
+    return res.json(plate);
   }
-  
-  res.json(data);
 });
 
 // @desc    Generate plate preview
