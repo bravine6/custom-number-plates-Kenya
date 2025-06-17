@@ -83,11 +83,27 @@ app.get('/', (req, res) => {
   res.json({ message: 'Welcome to NTSA Custom Plates API' });
 });
 
-// Import Supabase client
-const { supabase } = require('./supabase');
+// Import Supabase client with error handling
+let supabase;
+try {
+  const supabaseModule = require('./supabase');
+  supabase = supabaseModule.supabase;
+} catch (error) {
+  console.error('Error loading Supabase client:', error.message);
+}
 
-// Health check route with database connection test using Supabase client
+// Health check route with fallback for when Supabase client isn't available
 app.get('/api/v1/health', async (req, res) => {
+  // If Supabase client isn't loaded, return a simplified health check
+  if (!supabase) {
+    return res.json({
+      status: 'partial',
+      message: 'API is running but Supabase client is not loaded',
+      environment: process.env.NODE_ENV,
+      error: 'Supabase client module not available'
+    });
+  }
+  
   try {
     // Test connection with a simple query
     const { data, error } = await supabase.from('plates').select('count', { count: 'exact' });

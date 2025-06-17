@@ -1,10 +1,42 @@
 const asyncHandler = require('express-async-handler');
-const { supabase } = require('../supabase');
+
+// Import Supabase client with error handling
+let supabase;
+try {
+  const supabaseModule = require('../supabase');
+  supabase = supabaseModule.supabase;
+} catch (error) {
+  console.error('Error loading Supabase client in plateController:', error.message);
+}
 
 // @desc    Get all plates
 // @route   GET /api/v1/plates
 // @access  Public
 const getPlates = asyncHandler(async (req, res) => {
+  // Check if Supabase client is available
+  if (!supabase) {
+    return res.json([
+      {
+        id: 1,
+        name: 'Standard Plate',
+        description: 'Regular Kenyan number plate (Demo - Supabase connection unavailable)',
+        base_price: 5000.00,
+        type: 'standard',
+        features: { colors: ['white', 'black'], materials: ['aluminum'] },
+        image_url: null
+      },
+      {
+        id: 2,
+        name: 'Personalized Plate',
+        description: 'Custom text on your plate (Demo - Supabase connection unavailable)',
+        base_price: 15000.00,
+        type: 'personalized',
+        features: { colors: ['white', 'black', 'blue'], materials: ['aluminum', 'carbon-fiber'] },
+        image_url: null
+      }
+    ]);
+  }
+  
   const { type } = req.query;
   
   let query = supabase.from('plates').select('*');
@@ -29,6 +61,36 @@ const getPlates = asyncHandler(async (req, res) => {
 // @route   GET /api/v1/plates/:id
 // @access  Public
 const getPlateById = asyncHandler(async (req, res) => {
+  // Check if Supabase client is available
+  if (!supabase) {
+    // Return demo data based on the ID
+    const id = parseInt(req.params.id);
+    if (id === 1) {
+      return res.json({
+        id: 1,
+        name: 'Standard Plate',
+        description: 'Regular Kenyan number plate (Demo - Supabase connection unavailable)',
+        base_price: 5000.00,
+        type: 'standard',
+        features: { colors: ['white', 'black'], materials: ['aluminum'] },
+        image_url: null
+      });
+    } else if (id === 2) {
+      return res.json({
+        id: 2,
+        name: 'Personalized Plate',
+        description: 'Custom text on your plate (Demo - Supabase connection unavailable)',
+        base_price: 15000.00,
+        type: 'personalized',
+        features: { colors: ['white', 'black', 'blue'], materials: ['aluminum', 'carbon-fiber'] },
+        image_url: null
+      });
+    } else {
+      res.status(404);
+      throw new Error('Plate not found (Demo - Supabase connection unavailable)');
+    }
+  }
+  
   const { data, error } = await supabase
     .from('plates')
     .select('*')
