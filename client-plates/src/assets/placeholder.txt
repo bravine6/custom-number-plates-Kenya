@@ -1,0 +1,7 @@
+Please create and add the following images to this directory:
+
+1. kenya_bg_1.jpg - An image of Kenya's wildlife (e.g., elephants, lions, etc.)
+2. kenya_bg_2.jpg - An image of Mount Kenya
+3. kenya_bg_3.jpg - An image of Nairobi cityscape
+
+These will be used as background images for the prestige license plates.
