@@ -11,15 +11,15 @@ try {
   throw new Error('Please install pg package manually');
 }
 
-// Create Sequelize instance with better error handling for serverless environments
+// Simple approach with better error handling for serverless environments
 const sequelize = new Sequelize(process.env.DATABASE_URL, {
   dialect: 'postgres',
   logging: false,
   dialectOptions: {
-    ssl: process.env.NODE_ENV === 'production' ? {
+    ssl: {
       require: true,
       rejectUnauthorized: false
-    } : false
+    }
   },
   pool: {
     max: 2,
@@ -27,6 +27,10 @@ const sequelize = new Sequelize(process.env.DATABASE_URL, {
     idle: 0,
     acquire: 3000,
     evict: 30000
+  },
+  retry: {
+    max: 3,
+    timeout: 60000
   }
 });
 

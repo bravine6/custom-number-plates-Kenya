@@ -56,14 +56,55 @@ const getSequelize = async () => {
   return sequelize;
 };
 
-// API routes
-app.use('/api/v1/plates', require('./routes/plateRoutes'));
-app.use('/api/v1/orders', require('./routes/orderRoutes'));
-app.use('/api/v1/users', require('./routes/userRoutes'));
+// Database connection middleware
+const dbMiddleware = async (req, res, next) => {
+  try {
+    if (!sequelize) {
+      await getSequelize();
+    }
+    next();
+  } catch (error) {
+    console.error('Database connection error in middleware:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Database connection error',
+      stack: process.env.NODE_ENV === 'production' ? null : error.stack
+    });
+  }
+};
+
+// Apply database middleware to API routes
+app.use('/api/v1/plates', dbMiddleware, require('./routes/plateRoutes'));
+app.use('/api/v1/orders', dbMiddleware, require('./routes/orderRoutes'));
+app.use('/api/v1/users', dbMiddleware, require('./routes/userRoutes'));
 
 // Catch all route
 app.get('/', (req, res) => {
   res.json({ message: 'Welcome to NTSA Custom Plates API' });
+});
+
+// Health check route with database connection test
+app.get('/api/v1/health', async (req, res) => {
+  try {
+    if (!sequelize) {
+      await getSequelize();
+    }
+    await sequelize.authenticate();
+    res.json({ 
+      status: 'ok',
+      message: 'API is running and database is connected',
+      database: 'Supabase',
+      environment: process.env.NODE_ENV
+    });
+  } catch (error) {
+    console.error('Health check failed:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Database connection error',
+      error: error.message,
+      stack: process.env.NODE_ENV === 'production' ? null : error.stack
+    });
+  }
 });
 
 // Error handler middleware
