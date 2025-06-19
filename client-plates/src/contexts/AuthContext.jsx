@@ -1,5 +1,6 @@
 import { createContext, useState, useEffect, useContext } from 'react';
 import axios from 'axios';
+import api from '../services/api';
 
 const AuthContext = createContext();
 
@@ -26,7 +27,7 @@ export const AuthProvider = ({ children }) => {
   
   const login = async (email, password) => {
     try {
-      const { data } = await axios.post('/api/v1/users/login', { email, password });
+      const { data } = await api.post('/users/login', { email, password });
       
       // Save user info to local storage
       localStorage.setItem('userInfo', JSON.stringify(data));
@@ -43,7 +44,7 @@ export const AuthProvider = ({ children }) => {
   
   const register = async (userData) => {
     try {
-      const { data } = await axios.post('/api/v1/users', userData);
+      const { data } = await api.post('/users', userData);
       
       // Save user info to local storage
       localStorage.setItem('userInfo', JSON.stringify(data));
@@ -66,7 +67,7 @@ export const AuthProvider = ({ children }) => {
   
   const updateProfile = async (userData) => {
     try {
-      const { data } = await axios.put('/api/v1/users/profile', userData);
+      const { data } = await api.put('/users/profile', userData);
       
       // Update user info in local storage
       localStorage.setItem('userInfo', JSON.stringify(data));
