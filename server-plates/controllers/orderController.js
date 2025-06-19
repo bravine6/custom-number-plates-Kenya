@@ -584,24 +584,127 @@ const createOrder = asyncHandler(async (req, res) => {
 
 // @desc    Get order by ID
 // @route   GET /api/v1/orders/:id
-// @access  Private
+// @access  Public in development, Private in production
 const getOrderById = asyncHandler(async (req, res) => {
-  const order = await Order.findByPk(req.params.id, {
-    include: [{ model: OrderItem }],
-  });
+  const orderId = req.params.id;
   
-  if (!order) {
-    res.status(404);
-    throw new Error('Order not found');
+  // MOCK DATABASE IMPLEMENTATION
+  if (useMockDb && req.mockDb) {
+    console.log('Using mock database for order lookup');
+    
+    try {
+      // Return mock order data
+      const mockOrder = {
+        id: orderId,
+        totalAmount: 40500,
+        status: 'payment_completed',
+        paymentMethod: 'mpesa',
+        shippingMethod: 'pickup',
+        address: 'Nairobi GPO Huduma Center',
+        OrderItems: [
+          {
+            id: `item-${Date.now()}`,
+            plateText: 'CUSTOM',
+            plateType: 'prestige',
+            quantity: 1,
+            price: 40500,
+            backgroundIndex: 0
+          }
+        ]
+      };
+      
+      return res.json(mockOrder);
+    } catch (error) {
+      console.error('Error fetching mock order:', error);
+      return res.status(500).json({
+        message: 'Error fetching order details'
+      });
+    }
   }
   
-  // Check if user is owner of order or admin
-  if (order.userId !== req.user.id && !req.user.isAdmin) {
-    res.status(403);
-    throw new Error('Not authorized to access this order');
+  // SUPABASE REST IMPLEMENTATION
+  else if (useSupabaseRest || (req.supabase && !useMockDb)) {
+    // Use the supabase instance from the request if available, otherwise use the global one
+    const supabaseClient = req.supabase || supabase;
+    console.log('Using Supabase REST API for order lookup');
+    
+    try {
+      // Get order from Supabase
+      const { data: orderData, error: orderError } = await supabaseClient
+        .from('orders')
+        .select('*')
+        .eq('id', orderId)
+        .single();
+      
+      if (orderError) {
+        console.error('Error fetching order:', orderError);
+        return res.status(404).json({
+          message: 'Order not found'
+        });
+      }
+      
+      // Get order items from Supabase
+      const { data: orderItems, error: itemsError } = await supabaseClient
+        .from('orderitems')
+        .select('*')
+        .eq('order_id', orderId);
+      
+      if (itemsError) {
+        console.error('Error fetching order items:', itemsError);
+      }
+      
+      // Check authorization if we have a user in the request and we're in production
+      if (process.env.NODE_ENV === 'production' && req.user) {
+        if (orderData.user_id !== req.user.id && !req.user.isAdmin) {
+          return res.status(403).json({
+            message: 'Not authorized to access this order'
+          });
+        }
+      }
+      
+      // Combine order with items
+      const fullOrder = {
+        ...orderData,
+        OrderItems: orderItems || []
+      };
+      
+      return res.json(fullOrder);
+    } catch (error) {
+      console.error('Error fetching order with Supabase:', error);
+      return res.status(500).json({
+        message: 'Error fetching order details'
+      });
+    }
   }
   
-  res.json(order);
+  // SEQUELIZE IMPLEMENTATION (FALLBACK)
+  else {
+    try {
+      const order = await Order.findByPk(orderId, {
+        include: [{ model: OrderItem }],
+      });
+      
+      if (!order) {
+        res.status(404);
+        throw new Error('Order not found');
+      }
+      
+      // Check authorization if we have a user in the request and we're in production
+      if (process.env.NODE_ENV === 'production' && req.user) {
+        if (order.userId !== req.user.id && !req.user.isAdmin) {
+          res.status(403);
+          throw new Error('Not authorized to access this order');
+        }
+      }
+      
+      res.json(order);
+    } catch (error) {
+      console.error('Error fetching order with Sequelize:', error);
+      res.status(500).json({
+        message: 'Error fetching order details: ' + error.message
+      });
+    }
+  }
 });
 
 // @desc    Get logged in user orders

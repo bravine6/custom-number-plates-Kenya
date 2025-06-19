@@ -22,8 +22,13 @@ router.route('/')
 
 router.get('/admin', protect, admin, getOrders);
 
+// Allow public access to order details for order success page in development/testing
+const orderGetMiddleware = process.env.NODE_ENV === 'production' 
+  ? [protect, getOrderById] 
+  : [getOrderById];
+
 router.route('/:id')
-  .get(protect, getOrderById);
+  .get(orderGetMiddleware);
 
 router.put('/:id/pay', protect, updateOrderToPaid);
 

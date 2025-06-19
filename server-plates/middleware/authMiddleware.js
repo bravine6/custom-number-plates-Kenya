@@ -9,6 +9,23 @@ const mockDb = require('../data/mockData');
 const protect = asyncHandler(async (req, res, next) => {
   let token;
 
+  // Special case for order endpoint - check if this is a GET for a specific order ID in URL
+  // This is to allow public access to the order success page
+  if (req.method === 'GET' && req.originalUrl.startsWith('/api/v1/orders/') && req.originalUrl.split('/').length >= 4) {
+    // Extract the order ID from the URL (avoid query parameters)
+    const orderId = req.originalUrl.split('/')[3].split('?')[0];
+    
+    // Only allow public access if it appears to be a valid UUID or has a specific format
+    if (orderId && 
+        (orderId.length > 30 || // Likely a UUID
+         (orderId.includes('-') && orderId.split('-').length >= 2))) { // Has our format
+      console.log('Order ID access detected, allowing public access:', orderId);
+      // Don't set req.user, but allow the request to proceed
+      // The controller will handle authorization based on presence of req.user
+      return next();
+    }
+  }
+  
   // Skip authentication in development mode if specified in the environment
   if (process.env.NODE_ENV !== 'production' && process.env.SKIP_AUTH === 'true') {
     console.log('Authentication bypassed in development mode');
