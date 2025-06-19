@@ -31,19 +31,28 @@ const OrderSuccessPage = () => {
       try {
         // Fetch the order details from the API
         const data = await getOrderById(orderId);
+        console.log('Order data from API:', JSON.stringify(data));
         setOrder(data);
       } catch (error) {
         console.error('Order fetch error:', error);
-        // Fallback to mock data if there's an error
-        setOrder({
-          id: orderId,
-          totalAmount: 40500,
-          status: 'payment_completed', // Default to completed for testing
-          paymentMethod: 'mpesa',
-          shippingMethod: 'pickup',
-          address: 'Nairobi GPO Huduma Center', // Default huduma center
-        });
-        setError('Using mock data. In production, this would fetch from the API.');
+        console.error('Error response:', error.response?.data);
+        
+        // Try to extract any data that might be in the error response
+        if (error.response?.data?.order) {
+          console.log('Found order data in error response');
+          setOrder(error.response.data.order);
+        } else {
+          // Fallback to mock data if there's an error
+          setOrder({
+            id: orderId,
+            totalAmount: 40500,
+            status: 'payment_completed', // Default to completed for testing
+            paymentMethod: 'mpesa',
+            shippingMethod: 'pickup',
+            address: 'Nairobi GPO Huduma Center', // Default huduma center
+          });
+          setError('Using mock data. In production, this would fetch from the API.');
+        }
       } finally {
         setLoading(false);
       }
@@ -67,15 +76,36 @@ const OrderSuccessPage = () => {
   
   // Extract plate details from the order if available
   const getPlateDetails = () => {
+    // Check if we have OrderItems with plate_text field (snake_case)
     if (order && order.OrderItems && order.OrderItems.length > 0) {
-      return order.OrderItems[0]; // Assuming the first item is the plate
+      const orderItem = order.OrderItems[0]; // Assuming the first item is the plate
+      
+      // Convert from snake_case to camelCase if needed
+      return {
+        plateText: orderItem.plate_text || orderItem.plateText || 'CUSTOM',
+        plateType: orderItem.plate_type || orderItem.plateType || 'prestige',
+        backgroundIndex: orderItem.background_index || orderItem.backgroundIndex || undefined,
+      };
     }
     
-    // Fallback data
+    // Log the order structure to help debug
+    console.log('Order structure:', JSON.stringify(order));
+    
+    // Try different possible structures
+    if (order && order.order && order.order.OrderItems && order.order.OrderItems.length > 0) {
+      const orderItem = order.order.OrderItems[0];
+      return {
+        plateText: orderItem.plate_text || orderItem.plateText || 'CUSTOM',
+        plateType: orderItem.plate_type || orderItem.plateType || 'prestige',
+        backgroundIndex: orderItem.background_index || orderItem.backgroundIndex || undefined,
+      };
+    }
+    
+    // Fallback data as last resort
     return {
-      plateText: order?.items?.[0]?.plateText || 'CUSTOM',
-      plateType: order?.items?.[0]?.plateType || 'prestige',
-      backgroundIndex: order?.items?.[0]?.backgroundIndex || undefined,
+      plateText: 'CUSTOM',
+      plateType: 'prestige',
+      backgroundIndex: undefined,
     };
   };
   

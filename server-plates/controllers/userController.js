@@ -98,7 +98,7 @@ const registerUser = asyncHandler(async (req, res) => {
         isAdmin: false,
       });
     } else {
-      // Create user in Supabase
+      // Create user in Supabase using snake_case column names
       const { data: newUser, error: createError } = await supabaseClient
         .from('users')
         .insert([{
@@ -106,10 +106,10 @@ const registerUser = asyncHandler(async (req, res) => {
           email,
           password: hashedPassword,
           phone,
-          idNumber,
+          id_number: idNumber,  // snake_case
           address: address || null,
           city: city || null,
-          isAdmin: false,
+          is_admin: false,      // snake_case
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         }])
@@ -381,7 +381,7 @@ const updateUserProfile = asyncHandler(async (req, res) => {
         throw new Error('User not found');
       }
       
-      // Prepare update data
+      // Prepare update data with snake_case column names
       const updateData = {
         name: name || user.name,
         email: email || user.email,
@@ -462,10 +462,10 @@ const getUsers = asyncHandler(async (req, res) => {
     } else {
       console.log('Using Supabase for getting all users');
       
-      // Get users from Supabase
+      // Get users from Supabase with snake_case column names
       const { data: users, error } = await supabaseClient
         .from('users')
-        .select('id, name, email, phone, address, city, isAdmin, created_at, updated_at');
+        .select('id, name, email, phone, address, city, is_admin, created_at, updated_at');
       
       if (error) {
         console.error('Error fetching users:', error);

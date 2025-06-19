@@ -12,9 +12,9 @@ const protect = asyncHandler(async (req, res, next) => {
   // Skip authentication in development mode if specified in the environment
   if (process.env.NODE_ENV !== 'production' && process.env.SKIP_AUTH === 'true') {
     console.log('Authentication bypassed in development mode');
-    // Create a mock user
+    // Create a mock user with proper UUID
     req.user = {
-      id: 'dev-user-' + Date.now(),
+      id: require('crypto').randomUUID(),
       name: 'Development User',
       email: 'dev@example.com',
       isAdmin: true
@@ -88,7 +88,7 @@ const protect = asyncHandler(async (req, res, next) => {
       if (process.env.NODE_ENV !== 'production') {
         console.log('Token validation failed, but using guest user in development mode');
         req.user = {
-          id: 'guest-' + Date.now(),
+          id: require('crypto').randomUUID(),
           name: 'Guest User',
           email: 'guest@example.com',
           isAdmin: false
@@ -106,7 +106,7 @@ const protect = asyncHandler(async (req, res, next) => {
   if (process.env.NODE_ENV !== 'production') {
     console.log('No token provided, but using guest user in development mode');
     req.user = {
-      id: 'guest-' + Date.now(),
+      id: require('crypto').randomUUID(),
       name: 'Guest User',
       email: 'guest@example.com',
       isAdmin: false

@@ -47,8 +47,8 @@ const createOrder = asyncHandler(async (req, res) => {
     throw new Error('No order items');
   }
   
-  // If no user is provided (when protection is disabled), create a guest user ID
-  const userId = req.user ? req.user.id : 'guest-' + Date.now();
+  // If no user is provided (when protection is disabled), create a proper UUID for guest user
+  const userId = req.user ? req.user.id : require('crypto').randomUUID();
   
   // MOCK DATABASE IMPLEMENTATION
   if (useMockDb && req.mockDb) {
@@ -178,14 +178,14 @@ const createOrder = asyncHandler(async (req, res) => {
       const { data: orderData, error: orderError } = await supabaseClient
         .from('orders')
         .insert([{
-          userId: userId, // Using the dynamically determined userId
-          shippingMethod: shippingMethod || 'free',
-          shippingCost,
+          user_id: userId, // Using snake_case as standard SQL convention
+          shipping_method: shippingMethod || 'free', // snake_case
+          shipping_cost: shippingCost, // snake_case
           status: 'pending',
           address: address || '',
           city: city || '',
-          phoneNumber: phoneNumber || '', // Using phoneNumber to match the migration file
-          totalAmount: 0 // Will update after adding items
+          phone_number: phoneNumber || '', // snake_case
+          total_amount: 0 // snake_case - Will update after adding items
         }])
         .select()
         .single();
@@ -226,8 +226,8 @@ const createOrder = asyncHandler(async (req, res) => {
             plate = existingPlates[0];
             plateId = plate.id;
             
-            // Check if plate is available
-            if (plate.isAvailable === false) {
+            // Check if plate is available (using snake_case)
+            if (plate.is_available === false || plate.isAvailable === false) {
               return res.status(400).json({
                 success: false,
                 message: `Plate ${plateText} is no longer available`
@@ -238,13 +238,13 @@ const createOrder = asyncHandler(async (req, res) => {
             const { data: newPlate, error: plateError } = await supabaseClient
               .from('plates')
               .insert([{
-                plateType: plateType,
+                plate_type: plateType,
                 text: plateText.toUpperCase(),
                 price: platePrice,
-                previewUrl: item.previewUrl || null,
+                preview_url: item.previewUrl || item.preview_url || null,
                 description: `Custom plate order: ${plateText}`,
-                backgroundIndex: item.backgroundIndex || null,
-                isAvailable: false
+                background_index: item.backgroundIndex || item.background_index || null,
+                is_available: false
               }])
               .select()
               .single();
@@ -259,11 +259,48 @@ const createOrder = asyncHandler(async (req, res) => {
             }
           }
         } else {
-          // Default values if missing
-          plateText = "CUSTOM";
-          plateType = "standard_custom";
-          platePrice = getPriceForPlateType(plateType);
-          plateId = `temp-${Date.now()}`;
+          // Log what's coming in to debug
+          console.log('Debug plate item data:', JSON.stringify(item));
+          
+          // For plate items with format "type-text-timestamp"
+          if (item.plateId && typeof item.plateId === 'string' && item.plateId.includes('-')) {
+            const parts = item.plateId.split('-');
+            if (parts.length >= 2) {
+              plateType = parts[0]; // First part is the type
+              plateText = parts[1]; // Second part is the text
+              console.log(`Extracted from plateId: type=${plateType}, text=${plateText}`);
+            }
+          }
+          
+          // Default values if still missing
+          plateText = plateText || item.text || item.plateText || item.plate_text || "CUSTOM";
+          plateType = plateType || item.type || item.plateType || item.plate_type || "standard_custom";
+          platePrice = item.price || getPriceForPlateType(plateType);
+          
+          console.log(`BEFORE PLATE CREATION: plateText=${plateText}, plateType=${plateType}, platePrice=${platePrice}`);
+          
+          // Create new plate since we have the text and type
+          const { data: newPlate, error: plateError } = await supabaseClient
+            .from('plates')
+            .insert([{
+              plate_type: plateType,
+              text: plateText.toUpperCase(),
+              price: platePrice,
+              description: `Custom plate order: ${plateText}`,
+              is_available: false
+            }])
+            .select()
+            .single();
+          
+          if (plateError) {
+            console.error('Error creating plate from parsed ID:', plateError);
+            // Generate a proper UUID for the plate ID as a fallback
+            plateId = require('crypto').randomUUID();
+          } else {
+            console.log(`Successfully created plate: ${JSON.stringify(newPlate)}`);
+            plate = newPlate;
+            plateId = plate.id;
+          }
         }
         
         // Add to total
@@ -271,19 +308,26 @@ const createOrder = asyncHandler(async (req, res) => {
         const itemTotal = platePrice * itemQuantity;
         totalAmount += itemTotal;
         
+        // Log values before order item creation
+        console.log(`BEFORE ORDER ITEM CREATION: plateText=${plateText}, plateId=${plateId}, plateType=${plateType}`);
+        
         // Create order item
+        const orderItemData = {
+          order_id: order.id,        // snake_case
+          plate_id: plateId,         // snake_case
+          quantity: itemQuantity,
+          price: platePrice,
+          plate_text: plateText.toUpperCase(),  // snake_case
+          plate_type: plateType,     // snake_case
+          preview_url: item.previewUrl || null,  // snake_case
+          background_index: item.backgroundIndex || null  // snake_case
+        };
+        
+        console.log(`ORDER ITEM DATA: ${JSON.stringify(orderItemData)}`);
+        
         const { data: orderItem, error: itemError } = await supabaseClient
           .from('orderitems')
-          .insert([{
-            orderId: order.id,
-            plateId: plateId,
-            quantity: itemQuantity,
-            price: platePrice,
-            plateText: plateText.toUpperCase(),
-            plateType: plateType,
-            previewUrl: item.previewUrl || null,
-            backgroundIndex: item.backgroundIndex || null
-          }])
+          .insert([orderItemData])
           .select()
           .single();
         
@@ -298,7 +342,7 @@ const createOrder = asyncHandler(async (req, res) => {
         if (plate && plate.id) {
           const { error: updateError } = await supabaseClient
             .from('plates')
-            .update({ isAvailable: false })
+            .update({ is_available: false })  // snake_case
             .eq('id', plate.id);
           
           if (updateError) {
@@ -308,10 +352,10 @@ const createOrder = asyncHandler(async (req, res) => {
         }
       }
       
-      // Update order with total amount
+      // Update order with total amount (using snake_case column name)
       const { data: updatedOrder, error: updateError } = await supabaseClient
         .from('orders')
-        .update({ totalAmount: totalAmount + shippingCost })
+        .update({ total_amount: totalAmount + shippingCost })
         .eq('id', order.id)
         .select()
         .single();
@@ -324,6 +368,9 @@ const createOrder = asyncHandler(async (req, res) => {
       // Add order items to the response
       const finalOrder = updatedOrder || order;
       finalOrder.OrderItems = orderItems;
+      
+      // Log the response being sent to client
+      console.log('ORDER ITEMS BEING RETURNED:', JSON.stringify(orderItems));
       
       return res.status(201).json({
         success: true,

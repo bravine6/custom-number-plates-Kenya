@@ -112,7 +112,7 @@ const CheckoutPage = () => {
         const orderData = {
           items: cartItems.map(item => ({
             plateId: item.plateId,
-            plateText: item.text,
+            plateText: item.plateText,
             plateType: item.plateType,
             price: item.price,
             backgroundIndex: item.backgroundIndex,

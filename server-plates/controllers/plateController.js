@@ -152,10 +152,10 @@ const createPlate = asyncHandler(async (req, res) => {
     .from('plates')
     .insert([
       { 
-        type,
+        plate_type: type,           // snake_case
         name,
         description,
-        base_price,
+        price: base_price,          // snake_case
         features: features || {},
         image_url: image_url || null
       }
@@ -189,14 +189,14 @@ const updatePlate = asyncHandler(async (req, res) => {
     throw new Error('Plate not found');
   }
   
-  // Update the plate
+  // Update the plate with snake_case column names
   const { data, error } = await supabase
     .from('plates')
     .update({ 
-      type: type || plate.type,
+      plate_type: type || plate.plate_type,  // snake_case
       name: name || plate.name,
       description: description || plate.description,
-      base_price: base_price || plate.base_price,
+      price: base_price || plate.price,      // snake_case
       features: features || plate.features,
       image_url: image_url || plate.image_url,
       updated_at: new Date().toISOString()
@@ -301,7 +301,7 @@ const checkPlateAvailability = asyncHandler(async (req, res) => {
       const { data: existingOrderItem, error: orderItemError } = await supabaseClient
         .from('orderitems')
         .select('id')
-        .ilike('plateText', text.toUpperCase())
+        .ilike('plate_text', text.toUpperCase())  // Using snake_case column name
         .limit(1);
       
       if (orderItemError) {
