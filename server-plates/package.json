@@ -11,6 +11,7 @@
     "migrate": "node ./migrations/run-migrations.js",
     "setup-db": "node ./migrations/setup-db.js",
     "create-tables": "node ./migrations/create-tables.js",
+    "fix-idnumber": "node ./migrations/fix-idnumber-column.js",
     "dev:mock": "cross-env USE_MOCK_DB=true USE_SUPABASE_REST=false nodemon server.js",
     "dev:supabase": "cross-env USE_SUPABASE_REST=true USE_MOCK_DB=false nodemon server.js"
   },
