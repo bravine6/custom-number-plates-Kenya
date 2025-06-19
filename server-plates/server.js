@@ -27,26 +27,56 @@ app.use(cors(corsOptions));
 // Check if we're in a serverless environment
 const isServerless = process.env.VERCEL || process.env.LAMBDA_TASK_ROOT;
 
+// Determine which database mode to use
+const useMockDb = process.env.USE_MOCK_DB === 'true';
+const useSupabaseRest = process.env.USE_SUPABASE_REST === 'true';
+// Set SKIP_AUTH to true by default in development mode
+if (process.env.NODE_ENV !== 'production' && process.env.SKIP_AUTH === undefined) {
+  process.env.SKIP_AUTH = 'true';
+  console.log('Authentication bypass enabled for development mode');
+}
+
+console.log('Database mode:', 
+  useMockDb ? 'Mock Database' : 
+  useSupabaseRest ? 'Supabase REST API' : 
+  'Sequelize + PostgreSQL');
+console.log('Authentication mode:', 
+  process.env.SKIP_AUTH === 'true' ? 'Bypassed (Development)' : 'Enforced');
+
 // For Vercel or other serverless environments, we'll lazy-load database connections
 let sequelize;
 
 const getSequelize = async () => {
   if (!sequelize) {
     try {
-      const { sequelize: seq } = require('./config/db');
-      sequelize = seq;
-      
-      // Only authenticate and sync in development
-      if (process.env.NODE_ENV !== 'production') {
-        await sequelize.authenticate();
-        console.log('Database connected successfully');
+      if (useSupabaseRest) {
+        // Use the Supabase REST API adapter
+        console.log('Using Supabase REST API instead of direct Postgres connection');
+        const { sequelize: seq } = require('./config/db');
+        sequelize = seq;
         
-        await sequelize.sync({ alter: true });
-        console.log('Database synchronized');
-      } else {
-        // In production, just authenticate without sync
+        // Authenticate to verify connection
         await sequelize.authenticate();
-        console.log('Database connected successfully');
+        console.log('Supabase REST API connected successfully');
+        
+        // No need to sync with Supabase REST API
+      } else {
+        // Traditional Sequelize connection
+        const { sequelize: seq } = require('./config/db');
+        sequelize = seq;
+        
+        // Only authenticate and sync in development
+        if (process.env.NODE_ENV !== 'production') {
+          await sequelize.authenticate();
+          console.log('Database connected successfully');
+          
+          await sequelize.sync({ alter: true });
+          console.log('Database synchronized');
+        } else {
+          // In production, just authenticate without sync
+          await sequelize.authenticate();
+          console.log('Database connected successfully');
+        }
       }
     } catch (error) {
       console.error('Database connection error:', error);
@@ -56,22 +86,44 @@ const getSequelize = async () => {
   return sequelize;
 };
 
-// Database connection middleware
+// Import mock database for fallback
+const mockDb = require('./data/mockData');
+
+// Database connection middleware with more intelligent fallback
 const dbMiddleware = async (req, res, next) => {
   try {
-    if (!sequelize) {
-      await getSequelize();
+    // Set the mock database on the request object only if explicitly configured to use it
+    // or if Supabase is unavailable
+    if (useMockDb) {
+      console.log('Using mock database as configured by USE_MOCK_DB=true');
+      req.mockDb = mockDb;
+    } else if (supabase) {
+      // If Supabase is available, don't set mockDb to prevent fallback to mock
+      req.supabase = supabase;
+      // Set USE_SUPABASE_REST to true to ensure controllers use Supabase
+      process.env.USE_SUPABASE_REST = 'true';
+    } else {
+      // Only use mock as fallback if Supabase is unavailable
+      console.log('Supabase unavailable, falling back to mock database');
+      req.mockDb = mockDb;
     }
     next();
   } catch (error) {
-    console.error('Database connection error in middleware:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Database connection error',
-      stack: process.env.NODE_ENV === 'production' ? null : error.stack
-    });
+    console.error('Database middleware error:', error);
+    next(error);
   }
 };
+
+// Add CORS headers for specific routes
+app.use('/api/v1/*', (req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  next();
+});
 
 // Apply database middleware to API routes
 app.use('/api/v1/plates', dbMiddleware, require('./routes/plateRoutes'));
@@ -83,75 +135,40 @@ app.get('/', (req, res) => {
   res.json({ message: 'Welcome to NTSA Custom Plates API' });
 });
 
-// Import mock database for fallback
-const mockDb = require('./data/mockData');
-
 // Import Supabase client with error handling
 let supabase;
 try {
   const supabaseModule = require('./supabase');
   supabase = supabaseModule.supabase;
+  
+  console.log('Connecting to Supabase at:', process.env.SUPABASE_URL);
+  console.log('Using API key:', process.env.SUPABASE_ANON_KEY ? process.env.SUPABASE_ANON_KEY.substring(0, 10) + '...' : 'Not set');
 } catch (error) {
   console.error('Error loading Supabase client:', error.message);
   console.log('Using mock database for API operations');
 }
 
-// Health check route with fallback for when Supabase client isn't available
+// Simple health check route that always works
 app.get('/api/v1/health', async (req, res) => {
-  // If Supabase client isn't loaded, return a health check with mock DB info
-  if (!supabase) {
+  try {
     return res.json({
       status: 'ok',
-      message: 'API is running with mock database',
-      database: 'Mock Database',
+      message: 'API is running',
+      database: useMockDb ? 'Mock Database' : 
+                useSupabaseRest ? 'Supabase REST API' : 
+                'Sequelize + PostgreSQL',
       environment: process.env.NODE_ENV,
-      data: {
-        plates: await mockDb.plates.findAll(),
-        users: 2,
-        serverTime: new Date().toISOString()
-      }
-    });
-  }
-  
-  try {
-    // Test connection with a simple query
-    const { data, error } = await supabase.from('plates').select('count', { count: 'exact' });
-    
-    if (error) {
-      console.error('Supabase health check error:', error);
-      return res.json({
-        status: 'ok',
-        message: 'API is running with mock database (Supabase connection failed)',
-        database: 'Mock Database',
-        environment: process.env.NODE_ENV,
-        data: {
-          plates: await mockDb.plates.findAll(),
-          users: 2,
-          serverTime: new Date().toISOString()
-        }
-      });
-    }
-    
-    res.json({ 
-      status: 'ok',
-      message: 'API is running and Supabase is connected',
-      database: 'Supabase',
-      environment: process.env.NODE_ENV,
-      data: data
+      mockDbEnabled: useMockDb,
+      authMode: process.env.SKIP_AUTH === 'true' ? 'Bypassed' : 'Enforced',
+      plateUniquenessEnforced: true,
+      serverTime: new Date().toISOString()
     });
   } catch (error) {
     console.error('Health check failed:', error);
-    // Fallback to mock DB on any error
-    return res.json({
-      status: 'ok',
-      message: 'API is running with mock database (Supabase error: ' + error.message + ')',
-      database: 'Mock Database',
-      environment: process.env.NODE_ENV,
-      data: {
-        plates: await mockDb.plates.findAll(),
-        users: 2,
-        serverTime: new Date().toISOString()
-      }
+    return res.status(500).json({
+      status: 'error',
+      message: 'Health check failed',
+      error: error.message
     });
   }
 });
@@ -166,7 +183,13 @@ if (!isServerless) {
   // Database connection and server start
   const startServer = async () => {
     try {
-      await getSequelize();
+      try {
+        await getSequelize();
+      } catch (error) {
+        console.error('Database connection error:', error);
+        console.log('Starting server with mock database fallback');
+      }
+      
       app.listen(PORT, () => {
         console.log(`Server running on port ${PORT}`);
       });

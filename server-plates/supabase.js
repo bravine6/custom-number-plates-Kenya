@@ -16,7 +16,34 @@ if (process.env.NODE_ENV !== 'production') {
   console.log(`Using API key: ${supabaseKey.substring(0, 10)}...`);
 }
 
-// Initialize Supabase client
-const supabase = createClient(supabaseUrl, supabaseKey);
+// Initialize Supabase client with additional options for better reliability
+const supabase = createClient(supabaseUrl, supabaseKey, {
+  auth: {
+    autoRefreshToken: true,
+    persistSession: true
+  },
+  db: {
+    schema: 'public'
+  }
+});
+
+// Test connection and log result
+const testConnection = async () => {
+  try {
+    const { data, error } = await supabase.from('users').select('count');
+    if (error) {
+      console.error('Supabase connection test failed:', error);
+      return false;
+    }
+    console.log('Supabase connection test succeeded');
+    return true;
+  } catch (err) {
+    console.error('Supabase connection test exception:', err);
+    return false;
+  }
+};
+
+// Run test in the background
+testConnection();
 
 module.exports = { supabase };

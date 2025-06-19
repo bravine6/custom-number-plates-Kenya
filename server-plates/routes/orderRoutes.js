@@ -11,8 +11,13 @@ const { protect, admin } = require('../middleware/authMiddleware');
 
 const router = express.Router();
 
+// Allow order creation without authentication in development/testing
+const orderCreateMiddleware = process.env.NODE_ENV === 'production' 
+  ? [protect, createOrder] 
+  : [createOrder];
+
 router.route('/')
-  .post(protect, createOrder)
+  .post(orderCreateMiddleware)
   .get(protect, getMyOrders);
 
 router.get('/admin', protect, admin, getOrders);

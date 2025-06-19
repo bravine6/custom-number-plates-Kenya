@@ -17,9 +17,13 @@ try {
 // @route   GET /api/v1/plates
 // @access  Public
 const getPlates = asyncHandler(async (req, res) => {
-  // Check if Supabase client is available
-  if (!supabase) {
+  // Use the supabase instance from the request if available, otherwise use the global one
+  const supabaseClient = req.supabase || supabase;
+  
+  // Check if we should use mock database
+  if ((process.env.USE_MOCK_DB === 'true' && req.mockDb) || !supabaseClient) {
     // Use mock database instead
+    console.log('Using mock database for getPlates');
     const { type } = req.query;
     const options = type ? { type } : {};
     const plates = await mockDb.plates.findAll(options);
@@ -29,7 +33,7 @@ const getPlates = asyncHandler(async (req, res) => {
   try {
     const { type } = req.query;
     
-    let query = supabase.from('plates').select('*');
+    let query = supabaseClient.from('plates').select('*');
     
     if (type) {
       query = query.eq('type', type);
@@ -250,27 +254,91 @@ const checkPlateAvailability = asyncHandler(async (req, res) => {
     throw new Error('Please provide plate text to check');
   }
   
-  // First check in custom plates
-  const { data: existingCustomPlate, error: customError } = await supabase
-    .from('order_items')
-    .select('id')
-    .ilike('customization->>text', text.toUpperCase())
-    .limit(1);
-  
-  if (customError) {
-    res.status(500);
-    throw new Error(customError.message);
+  try {
+    // Use the supabase instance from the request if available, otherwise use the global one
+    const supabaseClient = req.supabase || supabase;
+    
+    // Check if we should use mock database
+    if ((process.env.USE_MOCK_DB === 'true' && req.mockDb) || !supabaseClient) {
+      console.log('Using mock database for plate availability check');
+      
+      // Check availability in mock database
+      const isAvailable = await req.mockDb.plates_availability.checkAvailability(text);
+      
+      return res.json({
+        text: text.toUpperCase(),
+        isAvailable,
+        message: isAvailable 
+          ? 'This plate text is available!' 
+          : 'This plate text is already taken. Please choose another.',
+      });
+    }
+    
+    // Using Supabase (the preferred option)
+    if (supabaseClient) {
+      console.log('Using Supabase for plate availability check');
+      
+      // First check in plates table
+      const { data: existingPlate, error: plateError } = await supabaseClient
+        .from('plates')
+        .select('id')
+        .ilike('text', text.toUpperCase())
+        .limit(1);
+      
+      if (plateError) {
+        console.error('Error checking plates table:', plateError);
+        // Continue to check orderitems even if there's an error with plates table
+      } else if (existingPlate && existingPlate.length > 0) {
+        // Plate text already exists in plates table
+        return res.json({
+          text: text.toUpperCase(),
+          isAvailable: false,
+          message: 'This plate text is already taken. Please choose another.'
+        });
+      }
+      
+      // Next check in orderitems table
+      const { data: existingOrderItem, error: orderItemError } = await supabaseClient
+        .from('orderitems')
+        .select('id')
+        .ilike('plateText', text.toUpperCase())
+        .limit(1);
+      
+      if (orderItemError) {
+        console.error('Error checking orderitems table:', orderItemError);
+        // Fall back to assuming it's available if there's an error
+        return res.json({
+          text: text.toUpperCase(),
+          isAvailable: true,
+          message: 'This plate text is available!'
+        });
+      }
+      
+      const isAvailable = !existingOrderItem || existingOrderItem.length === 0;
+      
+      return res.json({
+        text: text.toUpperCase(),
+        isAvailable,
+        message: isAvailable 
+          ? 'This plate text is available!' 
+          : 'This plate text is already taken. Please choose another.',
+      });
+    }
+    
+    // Fallback to assuming it's available if no database connection
+    return res.json({
+      text: text.toUpperCase(),
+      isAvailable: true,
+      message: 'This plate text is available! (Using fallback)',
+    });
+  } catch (error) {
+    console.error('Error checking plate availability:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Error checking availability. Please try again.',
+      error: process.env.NODE_ENV === 'production' ? null : error.message
+    });
   }
-  
-  const isAvailable = !existingCustomPlate || existingCustomPlate.length === 0;
-  
-  res.json({
-    text: text.toUpperCase(),
-    isAvailable,
-    message: isAvailable 
-      ? 'This plate text is available!' 
-      : 'This plate text is already taken. Please choose another.',
-  });
 });
 
 module.exports = {

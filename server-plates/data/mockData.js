@@ -53,6 +53,11 @@ const users = [
     email: 'admin@plates.com',
     password: '$2a$10$7JB720yubVSZvUI0rEqK/.VqGOSsJTWR3K4Pw2xx1l8HXgnLwD.Ne', // admin123
     role: 'admin',
+    isAdmin: true,
+    phone: '0700000000',
+    idNumber: 'ADMIN001',
+    address: 'Admin Address',
+    city: 'Nairobi',
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString()
   },
@@ -62,6 +67,25 @@ const users = [
     email: 'user@example.com',
     password: '$2a$10$7JB720yubVSZvUI0rEqK/.VqGOSsJTWR3K4Pw2xx1l8HXgnLwD.Ne', // admin123
     role: 'user',
+    isAdmin: false,
+    phone: '0712345678',
+    idNumber: 'USER002',
+    address: 'Test Address',
+    city: 'Mombasa',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  },
+  {
+    id: 3,
+    name: 'New User',
+    email: 'test@example.com',
+    password: '$2a$10$7JB720yubVSZvUI0rEqK/.VqGOSsJTWR3K4Pw2xx1l8HXgnLwD.Ne', // admin123
+    role: 'user',
+    isAdmin: false,
+    phone: '0787654321',
+    idNumber: 'USER003',
+    address: 'New Address',
+    city: 'Kisumu',
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString()
   }
