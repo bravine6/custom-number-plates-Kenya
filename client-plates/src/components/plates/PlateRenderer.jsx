@@ -3,6 +3,31 @@ import { styled } from '@mui/material/styles';
 import QRCode from 'react-qr-code';
 import FavoriteIcon from '@mui/icons-material/Favorite';
 
+// Import background images properly for production
+import bg1 from '../../assets/kenya_bg_1.jpg';
+import bg2 from '../../assets/kenya_bg_2.jpg';
+import bg3 from '../../assets/kenya_bg_3.jpg';
+
+// Helper function to get the correct background image
+const getBgImage = (bgIndex) => {
+  // If a specific index is provided, use it
+  if (bgIndex !== null && bgIndex !== undefined) {
+    if (bgIndex === 0 || bgIndex === '0') return bg1;
+    if (bgIndex === 1 || bgIndex === '1') return bg2;
+    if (bgIndex === 2 || bgIndex === '2') return bg3;
+    // Handle 1-based indexing
+    if (bgIndex === 3 || bgIndex === '3') return bg3;
+    if (bgIndex === 2 || bgIndex === '2') return bg2;
+    if (bgIndex === 1 || bgIndex === '1') return bg1;
+  }
+  
+  // Otherwise, pick a random one
+  const random = Math.floor(Math.random() * 3);
+  if (random === 0) return bg1;
+  if (random === 1) return bg2;
+  return bg3;
+};
+
 const PlateContainer = styled(Paper)(({ theme, plateType, bgIndex = null }) => ({
   width: '350px',
   maxWidth: '100%',
@@ -21,7 +46,7 @@ const PlateContainer = styled(Paper)(({ theme, plateType, bgIndex = null }) => (
   border: `8px solid ${plateType === 'special' ? theme.palette.primary.main :
     plateType === 'prestige' ? '#003B5C' : '#000000'}`,
   backgroundImage: plateType === 'prestige' 
-    ? `url('/src/assets/kenya_bg_${bgIndex !== null ? bgIndex : Math.floor(Math.random() * 3) + 1}.jpg')` 
+    ? `url(${getBgImage(bgIndex)})`
     : 'none',
   backgroundSize: 'cover',
   backgroundPosition: 'center',
